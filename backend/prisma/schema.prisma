@@ -1,0 +1,547 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User and Organization models
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  firstName     String   @map("first_name")
+  lastName      String   @map("last_name")
+  phone         String?
+  avatarUrl     String?  @map("avatar_url")
+  isActive      Boolean  @default(true) @map("is_active")
+  emailVerified Boolean  @default(false) @map("email_verified")
+  lastLoginAt   DateTime? @map("last_login_at")
+  preferences   Json?    @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  userOrganizations UserOrganization[]
+  quotes            Quote[]
+  comments          QuoteComment[]
+  interactions      QuoteInteraction[]
+  notifications     Notification[]
+  activities        UserActivity[]
+  products          Product[]
+  services          Service[]
+  attachments       Attachment[]
+
+  @@map("users")
+}
+
+model Organization {
+  id              String   @id @default(uuid())
+  name            String
+  slug            String   @unique
+  logoUrl         String?  @map("logo_url")
+  primaryColor    String?  @map("primary_color")
+  secondaryColor  String?  @map("secondary_color")
+  address         String?
+  phone           String?
+  email           String?
+  website         String?
+  nzBusinessNumber String? @map("nz_business_number")
+  gstNumber       String?  @map("gst_number")
+  timezone        String   @default("Pacific/Auckland")
+  currency        String   @default("NZD")
+  language        String   @default("en")
+  settings        Json?    @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  userOrganizations UserOrganization[]
+  customers         Customer[]
+  quotes            Quote[]
+  gstSettings       GstSetting[]
+  invoiceSequences  InvoiceSequence[]
+  templates         Template[]
+  products          Product[]
+  services          Service[]
+  categories        Category[]
+  notifications     Notification[]
+  activities        UserActivity[]
+  attachments       Attachment[]
+  integrations      Integration[]
+
+  @@map("organizations")
+}
+
+model UserOrganization {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  organizationId String   @map("organization_id")
+  role           UserRole
+  permissions    Json?    @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@map("user_organizations")
+}
+
+// Customer model
+model Customer {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  firstName      String   @map("first_name")
+  lastName       String   @map("last_name")
+  email          String
+  phone          String?
+  companyName    String?  @map("company_name")
+  address        String?
+  city           String?
+  postalCode     String?  @map("postal_code")
+  country        String   @default("New Zealand")
+  notes          String?
+  tags           String[]
+  source         String?  // How they found you
+  status         CustomerStatus @default(ACTIVE)
+  totalSpent     Decimal  @default(0) @map("total_spent") @db.Decimal(10, 2)
+  lastContactAt  DateTime? @map("last_contact_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quotes         Quote[]
+  comments       QuoteComment[]
+  interactions   QuoteInteraction[]
+  notifications  Notification[]
+  activities     UserActivity[]
+
+  @@map("customers")
+}
+
+// Product and Service models
+model Product {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String
+  description    String?
+  sku            String?  @unique
+  price          Decimal  @db.Decimal(10, 2)
+  cost           Decimal? @db.Decimal(10, 2)
+  categoryId     String?  @map("category_id")
+  isActive       Boolean  @default(true) @map("is_active")
+  stockQuantity  Int?     @map("stock_quantity")
+  unit           String   @default("piece")
+  taxRate        Decimal  @default(0.15) @map("tax_rate") @db.Decimal(5, 2)
+  imageUrl       String?  @map("image_url")
+  metadata       Json?    @default("{}")
+  createdBy      String   @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category     Category?    @relation(fields: [categoryId], references: [id])
+  creator      User         @relation(fields: [createdBy], references: [id])
+  quoteItems   QuoteItem[]
+
+  @@map("products")
+}
+
+model Service {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String
+  description    String?
+  price          Decimal  @db.Decimal(10, 2)
+  hourlyRate     Decimal? @map("hourly_rate") @db.Decimal(10, 2)
+  categoryId     String?  @map("category_id")
+  isActive       Boolean  @default(true) @map("is_active")
+  taxRate        Decimal  @default(0.15) @map("tax_rate") @db.Decimal(5, 2)
+  imageUrl       String?  @map("image_url")
+  metadata       Json?    @default("{}")
+  createdBy      String   @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category     Category?    @relation(fields: [categoryId], references: [id])
+  creator      User         @relation(fields: [createdBy], references: [id])
+  quoteItems   QuoteItem[]
+
+  @@map("services")
+}
+
+model Category {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String
+  description    String?
+  color          String?
+  icon           String?
+  isActive       Boolean  @default(true) @map("is_active")
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products     Product[]
+  services     Service[]
+
+  @@map("categories")
+}
+
+// Quote models
+model Quote {
+  id                String      @id @default(uuid())
+  organizationId    String      @map("organization_id")
+  customerId        String      @map("customer_id")
+  quoteNumber       String      @unique @map("quote_number")
+  title             String
+  description       String?
+  status            QuoteStatus @default(DRAFT)
+  currency          String      @default("NZD")
+  subtotal          Decimal     @default(0) @db.Decimal(10, 2)
+  taxRate           Decimal     @default(0.15) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount         Decimal     @default(0) @map("tax_amount") @db.Decimal(10, 2)
+  discountPercentage Decimal    @default(0) @map("discount_percentage") @db.Decimal(5, 2)
+  discountAmount    Decimal     @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  totalAmount       Decimal     @default(0) @map("total_amount") @db.Decimal(10, 2)
+  validUntil        DateTime?   @map("valid_until")
+  termsConditions   String?     @map("terms_conditions")
+  notes             String?
+  tags              String[]
+  isPublic          Boolean     @default(false) @map("is_public")
+  publicUrl         String?     @map("public_url")
+  sentAt            DateTime?   @map("sent_at")
+  viewedAt          DateTime?   @map("viewed_at")
+  acceptedAt        DateTime?   @map("accepted_at")
+  rejectedAt        DateTime?   @map("rejected_at")
+  createdBy         String      @map("created_by")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer       Customer            @relation(fields: [customerId], references: [id])
+  creator        User                @relation(fields: [createdBy], references: [id])
+  items          QuoteItem[]
+  views          QuoteView[]
+  interactions   QuoteInteraction[]
+  comments       QuoteComment[]
+  attachments    Attachment[]
+  activities     UserActivity[]
+
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id          String   @id @default(uuid())
+  quoteId     String   @map("quote_id")
+  name        String
+  description String?
+  quantity    Decimal  @default(1) @db.Decimal(10, 2)
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(10, 2)
+  totalPrice  Decimal  @map("total_price") @db.Decimal(10, 2)
+  isOptional  Boolean  @default(false) @map("is_optional")
+  isEditable  Boolean  @default(true) @map("is_editable")
+  sortOrder   Int      @default(0) @map("sort_order")
+  productId   String?  @map("product_id")
+  serviceId   String?  @map("service_id")
+  metadata    Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  quote   Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+  service Service? @relation(fields: [serviceId], references: [id])
+
+  @@map("quote_items")
+}
+
+// Analytics and tracking models
+model QuoteView {
+  id               String   @id @default(uuid())
+  quoteId          String   @map("quote_id")
+  viewerIp         String?  @map("viewer_ip")
+  userAgent        String?  @map("user_agent")
+  referrer         String?
+  country          String?
+  city             String?
+  viewedAt         DateTime @default(now()) @map("viewed_at")
+  timeSpentSeconds Int?     @map("time_spent_seconds")
+  isUnique         Boolean  @default(true) @map("is_unique")
+
+  // Relations
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@map("quote_views")
+}
+
+model QuoteInteraction {
+  id         String             @id @default(uuid())
+  quoteId    String             @map("quote_id")
+  customerId String?            @map("customer_id")
+  userId     String?            @map("user_id")
+  action     InteractionAction
+  metadata   Json?
+  ipAddress  String?            @map("ip_address")
+  userAgent  String?            @map("user_agent")
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  // Relations
+  quote    Quote?    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id])
+  user     User?     @relation(fields: [userId], references: [id])
+
+  @@map("quote_interactions")
+}
+
+model QuoteComment {
+  id         String   @id @default(uuid())
+  quoteId    String   @map("quote_id")
+  userId     String?  @map("user_id")
+  customerId String?  @map("customer_id")
+  content    String
+  isInternal Boolean  @default(false) @map("is_internal")
+  parentId   String?  @map("parent_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  quote    Quote?         @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  user     User?          @relation(fields: [userId], references: [id])
+  customer Customer?      @relation(fields: [customerId], references: [id])
+  parent   QuoteComment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  QuoteComment[] @relation("CommentReplies")
+
+  @@map("quote_comments")
+}
+
+// Attachment model
+model Attachment {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  userId         String?  @map("user_id")
+  quoteId        String?  @map("quote_id")
+  fileName       String   @map("file_name")
+  originalName   String   @map("original_name")
+  mimeType       String   @map("mime_type")
+  size           Int
+  url            String
+  bucket         String
+  key            String
+  isPublic       Boolean  @default(false) @map("is_public")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id])
+  quote        Quote?       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+// Notification model
+model Notification {
+  id             String           @id @default(uuid())
+  organizationId String           @map("organization_id")
+  userId         String?          @map("user_id")
+  customerId     String?          @map("customer_id")
+  type           NotificationType
+  title          String
+  message        String
+  data           Json?            @default("{}")
+  isRead         Boolean          @default(false) @map("is_read")
+  readAt         DateTime?        @map("read_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id])
+  customer     Customer?    @relation(fields: [customerId], references: [id])
+
+  @@map("notifications")
+}
+
+// User Activity model
+model UserActivity {
+  id             String         @id @default(uuid())
+  organizationId String         @map("organization_id")
+  userId         String?        @map("user_id")
+  customerId     String?        @map("customer_id")
+  quoteId        String?        @map("quote_id")
+  action         ActivityAction
+  description    String
+  metadata       Json?          @default("{}")
+  ipAddress      String?        @map("ip_address")
+  userAgent      String?        @map("user_agent")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id])
+  customer     Customer?    @relation(fields: [customerId], references: [id])
+  quote        Quote?       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@map("user_activities")
+}
+
+// Integration model
+model Integration {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String
+  type           IntegrationType
+  config         Json
+  isActive       Boolean  @default(true) @map("is_active")
+  lastSyncAt     DateTime? @map("last_sync_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("integrations")
+}
+
+// NZ-specific models
+model GstSetting {
+  id               String   @id @default(uuid())
+  organizationId   String   @map("organization_id")
+  gstNumber        String?  @map("gst_number")
+  gstRate          Decimal  @default(0.15) @map("gst_rate") @db.Decimal(5, 2)
+  isGstRegistered  Boolean  @default(true) @map("is_gst_registered")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("gst_settings")
+}
+
+model InvoiceSequence {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  prefix         String   @default("INV")
+  currentNumber  Int      @default(1) @map("current_number")
+  year           Int
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_sequences")
+}
+
+// Template model
+model Template {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String
+  description    String?
+  type           TemplateType
+  content        Json
+  isActive       Boolean  @default(true) @map("is_active")
+  isDefault      Boolean  @default(false) @map("is_default")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("templates")
+}
+
+// Enums
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  LEAD
+  PROSPECT
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  VIEWED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum InteractionAction {
+  VIEWED
+  DOWNLOADED
+  SHARED
+  ACCEPTED
+  REJECTED
+  PRINTED
+  EMAILED
+}
+
+enum NotificationType {
+  QUOTE_VIEWED
+  QUOTE_ACCEPTED
+  QUOTE_REJECTED
+  QUOTE_EXPIRED
+  NEW_COMMENT
+  SYSTEM_ALERT
+}
+
+enum ActivityAction {
+  LOGIN
+  LOGOUT
+  CREATE_QUOTE
+  UPDATE_QUOTE
+  DELETE_QUOTE
+  SEND_QUOTE
+  VIEW_QUOTE
+  ACCEPT_QUOTE
+  REJECT_QUOTE
+  CREATE_CUSTOMER
+  UPDATE_CUSTOMER
+  CREATE_PRODUCT
+  UPDATE_PRODUCT
+  CREATE_SERVICE
+  UPDATE_SERVICE
+}
+
+enum IntegrationType {
+  XERO
+  MYOB
+  QUICKBOOKS
+  STRIPE
+  PAYPAL
+  GOOGLE_ANALYTICS
+  MAILCHIMP
+  SLACK
+  ZAPIER
+}
+
+enum TemplateType {
+  QUOTE
+  INVOICE
+  EMAIL
+  TERMS_CONDITIONS
+  FOOTER
+  HEADER
+} 

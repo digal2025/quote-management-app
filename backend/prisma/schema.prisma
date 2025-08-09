@@ -14,15 +14,19 @@ datasource db {
 model User {
   id            String   @id @default(uuid())
   email         String   @unique
-  passwordHash  String   @map("password_hash")
-  firstName     String   @map("first_name")
-  lastName      String   @map("last_name")
+  password      String?  // Made optional for OAuth users
+  name          String
   phone         String?
   avatarUrl     String?  @map("avatar_url")
-  isActive      Boolean  @default(true) @map("is_active")
+  status        UserStatus @default(ACTIVE)
   emailVerified Boolean  @default(false) @map("email_verified")
   lastLoginAt   DateTime? @map("last_login_at")
   preferences   Json?    @default("{}")
+  
+  // OAuth fields
+  oauthId       String?  @map("oauth_id")
+  oauthProvider OAuthProvider? @map("oauth_provider")
+  
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -469,6 +473,19 @@ enum UserRole {
   ADMIN
   MEMBER
   VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum OAuthProvider {
+  GOOGLE
+  GITHUB
+  LINKEDIN
 }
 
 enum CustomerStatus {

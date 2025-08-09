@@ -4,6 +4,16 @@ import helmet from "helmet";
 import compression from "compression";
 import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
+import passport from "passport";
+import session from "express-session";
+import cookieParser from "cookie-parser";
+
+// Import routes
+import authRoutes from "./routes/auth";
+import oauthRoutes from "./routes/oauth";
+
+// Import passport config
+import "./config/passport";
 
 // Load environment variables
 dotenv.config();
@@ -23,6 +33,22 @@ app.use(
 );
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// Session configuration for OAuth
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-session-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -42,6 +68,10 @@ app.get("/api", (req, res) => {
     status: "running",
   });
 });
+
+// Authentication routes
+app.use("/api/auth", authRoutes);
+app.use("/api/auth/oauth", oauthRoutes);
 
 // Test database connection
 app.get("/api/test-db", async (req, res) => {
@@ -101,85 +131,58 @@ app.get("/api/quotes", async (req, res) => {
 });
 
 // Error handling middleware
-app.use(
-  (
-    err: any,
-    req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction,
-  ) => {
-    // eslint-disable-next-line no-console
-    console.error("Error:", err);
-    res.status(500).json({
-      success: false,
-      error: "Internal server error",
-      message:
-        process.env.NODE_ENV === "development"
-          ? err.message
-          : "Something went wrong",
-    });
-  },
-);
-
-// 404 handler
-app.use("*", (req, res) => {
-  res.status(404).json({
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // eslint-disable-next-line no-console
+  console.error('Error:', err);
+  res.status(500).json({
     success: false,
-    error: "Route not found",
-    path: req.originalUrl,
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
   });
 });
 
-// Start server
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
+  });
+});
+
 async function startServer() {
   try {
     // Test database connection
     await prisma.$connect();
     // eslint-disable-next-line no-console
-    console.log("✅ Database connected successfully");
+    console.log('✅ Database connected successfully');
 
+    // Start server
     app.listen(PORT, () => {
       // eslint-disable-next-line no-console
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
+      console.log(`🚀 Server running on port ${PORT}`);
       // eslint-disable-next-line no-console
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       // eslint-disable-next-line no-console
-      console.log(`🔗 API endpoint: http://localhost:${PORT}/api`);
-      // eslint-disable-next-line no-console
-      console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
+      console.log(`🔗 API base: http://localhost:${PORT}/api`);
     });
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.error("❌ Failed to start server:", error);
-    // eslint-disable-next-line no-console
-    console.log("⚠️  Starting server without database connection...");
-
-    app.listen(PORT, () => {
-      // eslint-disable-next-line no-console
-      console.log(
-        `🚀 Server running on http://localhost:${PORT} (without database)`,
-      );
-      // eslint-disable-next-line no-console
-      console.log(`📊 Health check: http://localhost:${PORT}/health`);
-      // eslint-disable-next-line no-console
-      console.log(`🔗 API endpoint: http://localhost:${PORT}/api`);
-      // eslint-disable-next-line no-console
-      console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
-    });
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
   }
 }
 
 // Graceful shutdown
-process.on("SIGINT", async () => {
+process.on('SIGTERM', async () => {
   // eslint-disable-next-line no-console
-  console.log("\n🛑 Shutting down server...");
+  console.log('SIGTERM received, shutting down gracefully');
   await prisma.$disconnect();
   process.exit(0);
 });
 
-process.on("SIGTERM", async () => {
+process.on('SIGINT', async () => {
   // eslint-disable-next-line no-console
-  console.log("\n🛑 Shutting down server...");
+  console.log('SIGINT received, shutting down gracefully');
   await prisma.$disconnect();
   process.exit(0);
 });

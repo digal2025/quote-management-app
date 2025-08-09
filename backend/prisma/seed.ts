@@ -31,11 +31,10 @@ async function main() {
     update: {},
     create: {
       email: 'admin@democompany.co.nz',
-      passwordHash: adminPassword,
-      firstName: 'John',
-      lastName: 'Smith',
+      password: adminPassword,
+      name: 'John Smith',
       phone: '+64 21 123 456',
-      isActive: true,
+      status: 'ACTIVE',
       emailVerified: true,
     },
   });
@@ -47,11 +46,10 @@ async function main() {
     update: {},
     create: {
       email: 'member@democompany.co.nz',
-      passwordHash: memberPassword,
-      firstName: 'Jane',
-      lastName: 'Doe',
+      password: memberPassword,
+      name: 'Jane Doe',
       phone: '+64 21 987 654',
-      isActive: true,
+      status: 'ACTIVE',
       emailVerified: true,
     },
   });

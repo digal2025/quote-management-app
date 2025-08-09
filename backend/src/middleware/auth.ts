@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -14,18 +14,19 @@ export interface AuthenticatedRequest extends Request {
 }
 
 export const authenticateToken = async (
-  req: AuthenticatedRequest,
+  req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ 
+    res.status(401).json({ 
       success: false, 
       message: 'Access token required' 
     });
+    return;
   }
 
   try {
@@ -35,7 +36,7 @@ export const authenticateToken = async (
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       include: {
-        organizations: {
+        userOrganizations: {
           include: {
             organization: true
           }
@@ -44,38 +45,42 @@ export const authenticateToken = async (
     });
 
     if (!user) {
-      return res.status(401).json({ 
+      res.status(401).json({ 
         success: false, 
         message: 'User not found' 
       });
+      return;
     }
 
-    req.user = {
+    // Extend the request object with user data
+    (req as AuthenticatedRequest).user = {
       id: user.id,
       email: user.email,
       name: user.name,
-      organizationId: user.organizations[0]?.organizationId
+      organizationId: user.userOrganizations[0]?.organizationId
     };
 
     next();
   } catch (error) {
-    return res.status(403).json({ 
+    res.status(403).json({ 
       success: false, 
       message: 'Invalid or expired token' 
     });
+    return;
   }
 };
 
 export const optionalAuth = async (
-  req: AuthenticatedRequest,
+  req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    return next();
+    next();
+    return;
   }
 
   try {
@@ -84,7 +89,7 @@ export const optionalAuth = async (
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       include: {
-        organizations: {
+        userOrganizations: {
           include: {
             organization: true
           }
@@ -93,11 +98,11 @@ export const optionalAuth = async (
     });
 
     if (user) {
-      req.user = {
+      (req as AuthenticatedRequest).user = {
         id: user.id,
         email: user.email,
         name: user.name,
-        organizationId: user.organizations[0]?.organizationId
+        organizationId: user.userOrganizations[0]?.organizationId
       };
     }
 

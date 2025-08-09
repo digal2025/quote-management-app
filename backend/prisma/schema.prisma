@@ -49,6 +49,7 @@ model Organization {
   name            String
   slug            String   @unique
   logoUrl         String?  @map("logo_url")
+  logoFilename    String?  @map("logo_filename")
   primaryColor    String?  @map("primary_color")
   secondaryColor  String?  @map("secondary_color")
   address         String?

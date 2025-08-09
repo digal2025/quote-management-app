@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
@@ -42,9 +42,16 @@ router.post('/register', async (req: Request, res: Response) => {
       let organizationId: string | undefined;
       
       if (organizationName) {
+        // Generate a slug from the organization name
+        const slug = organizationName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '');
+        
         const organization = await tx.organization.create({
           data: {
             name: organizationName,
+            slug: slug,
             timezone: 'Pacific/Auckland',
             currency: 'NZD',
             language: 'en',
@@ -73,7 +80,7 @@ router.post('/register', async (req: Request, res: Response) => {
             userId: user.id,
             organizationId,
             role: 'OWNER',
-            permissions: ['ALL']
+            permissions: { permissions: ['ALL'] }
           }
         });
       }
@@ -91,7 +98,7 @@ router.post('/register', async (req: Request, res: Response) => {
     // Return user data (without password)
     const { password: _, ...userData } = result.user;
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: 'User registered successfully',
       data: {
@@ -103,7 +110,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Internal server error',
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -128,7 +135,7 @@ router.post('/login', async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({
       where: { email },
       include: {
-        organizations: {
+        userOrganizations: {
           include: {
             organization: true
           }
@@ -144,7 +151,7 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     // Check password
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, user.password || '');
     if (!isValidPassword) {
       return res.status(401).json({
         success: false,
@@ -168,7 +175,7 @@ router.post('/login', async (req: Request, res: Response) => {
     // Return user data (without password)
     const { password: _, ...userData } = user;
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Login successful',
       data: {
@@ -179,7 +186,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Internal server error',
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -188,12 +195,22 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 // Get current user
-router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/me', (req: Request, res: Response, next: NextFunction) => {
+  authenticateToken(req as AuthenticatedRequest, res, next);
+}, async (req: Request, res: Response) => {
   try {
+    const authenticatedReq = req as AuthenticatedRequest;
+    if (!authenticatedReq.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+    }
+
     const user = await prisma.user.findUnique({
-      where: { id: req.user!.id },
+      where: { id: authenticatedReq.user.id },
       include: {
-        organizations: {
+        userOrganizations: {
           include: {
             organization: true
           }
@@ -210,14 +227,14 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: Resp
 
     const { password: _, ...userData } = user;
 
-    res.json({
+    return res.json({
       success: true,
       data: userData
     });
 
   } catch (error) {
     console.error('Get user error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Internal server error',
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -227,7 +244,7 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: Resp
 
 // Logout (client-side token removal)
 router.post('/logout', (req: Request, res: Response) => {
-  res.json({
+  return res.json({
     success: true,
     message: 'Logged out successfully'
   });
@@ -265,11 +282,12 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
     );
 
     // Store reset token in user preferences
+    const currentPreferences = user.preferences as any || {};
     await prisma.user.update({
       where: { id: user.id },
       data: {
         preferences: {
-          ...user.preferences,
+          ...currentPreferences,
           resetToken,
           resetTokenExpires: new Date(Date.now() + 3600000) // 1 hour
         }
@@ -278,14 +296,14 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
 
     // TODO: Send email with reset link
     // For now, just return success
-    res.json({
+    return res.json({
       success: true,
       message: 'If an account with that email exists, a password reset link has been sent'
     });
 
   } catch (error) {
     console.error('Forgot password error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Internal server error',
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -327,7 +345,8 @@ router.post('/reset-password', async (req: Request, res: Response) => {
     }
 
     // Check if token is expired
-    const resetTokenExpires = user.preferences?.resetTokenExpires;
+    const currentPreferences = user.preferences as any || {};
+    const resetTokenExpires = currentPreferences.resetTokenExpires;
     if (resetTokenExpires && new Date(resetTokenExpires) < new Date()) {
       return res.status(400).json({
         success: false,
@@ -345,21 +364,21 @@ router.post('/reset-password', async (req: Request, res: Response) => {
       data: {
         password: hashedPassword,
         preferences: {
-          ...user.preferences,
+          ...currentPreferences,
           resetToken: null,
           resetTokenExpires: null
         }
       }
     });
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Password reset successfully'
     });
 
   } catch (error) {
     console.error('Reset password error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Internal server error',
       error: error instanceof Error ? error.message : 'Unknown error'

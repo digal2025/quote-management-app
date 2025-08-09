@@ -12,7 +12,7 @@ export default function HomePage() {
               <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">Q</span>
               </div>
-              <span className="text-xl font-semibold text-gray-900">QuoteApp</span>
+              <span className="text-xl font-semibold text-gray-900">InstaQuote</span>
             </div>
             
             <div className="hidden md:flex items-center space-x-8">
